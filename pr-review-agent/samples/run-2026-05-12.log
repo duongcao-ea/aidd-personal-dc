@@ -1,0 +1,18 @@
+[2026-05-12 17:17:42] Starting daily PR review (MAX_PARALLEL=6)
+[2026-05-12 17:17:44] Discovered 39 active repos
+[2026-05-12 17:18:38] Found 7 PRs to review
+[2026-05-12 17:18:38]   → city-scrapers-charnc #21: Spiders to airtable syncing workflow
+[2026-05-12 17:18:38]   → city-scrapers-dallas #34: Spiders to airtable syncing workflow
+[2026-05-12 17:18:38]   → city-scrapers-lascruc #22: Spiders to airtable syncing workflow
+[2026-05-12 17:18:38]   → city-scrapers-minn #66: 🏗️Build spider: Add spider for St. Paul Public Schools Board of Education
+[2026-05-12 17:18:38]   → city-scrapers-minn #65: Add Ramsey County spiders with Legistar-based parsing
+[2026-05-12 17:18:38]   → city-scrapers-minn #64: Spiders to airtable syncing workflow
+[2026-05-12 17:19:23]     ✓ /Users/duongcaochanh/pr-reviews/city-scrapers-minn_PR64.md
+[2026-05-12 17:19:23]   → city-scrapers-minn #63: 🕷️ Fix spider factory for Minneapolis City
+[2026-05-12 17:19:25]     ✓ /Users/duongcaochanh/pr-reviews/city-scrapers-charnc_PR21.md
+[2026-05-12 17:19:29]     ✓ /Users/duongcaochanh/pr-reviews/city-scrapers-dallas_PR34.md
+[2026-05-12 17:19:37]     ✓ /Users/duongcaochanh/pr-reviews/city-scrapers-lascruc_PR22.md
+[2026-05-12 17:20:05]     ✓ /Users/duongcaochanh/pr-reviews/city-scrapers-minn_PR65.md
+[2026-05-12 17:20:28]     ✓ /Users/duongcaochanh/pr-reviews/city-scrapers-minn_PR66.md
+[2026-05-12 17:20:38]     ✓ /Users/duongcaochanh/pr-reviews/city-scrapers-minn_PR63.md
+[2026-05-12 17:20:38] Done. Reviewed=7 Failed=0 Total=7
