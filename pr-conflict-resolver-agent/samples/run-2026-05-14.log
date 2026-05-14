@@ -1,0 +1,9 @@
+[2026-05-14 15:35:17] Starting daily PR conflict resolver (mode=dry-run, MAX_PARALLEL=3, repo_filter=<all>)
+[2026-05-14 15:35:18] Scanning 39 repo(s)
+[2026-05-14 15:35:28]   city-scrapers-atl: refresh-staging run 25841360582 skipped PRs: 207 205 
+[2026-05-14 15:36:31] Found 2 conflicting PRs from refresh-staging output
+[2026-05-14 15:36:31]   → city-scrapers-atl #207: 🏗️ Build spider: Add spider for Atlanta Water and Sewer Appeals Board 
+[2026-05-14 15:36:31]   → city-scrapers-atl #205:  🕷️Fix scraper: Fix a spider factory for Atlanta City Council 
+[2026-05-14 15:36:35]     (clean merge — no conflict; skipping)
+[2026-05-14 15:36:35]     (clean merge — no conflict; skipping)
+[2026-05-14 15:36:35] Done. Mode=dry-run Resolved=2 Failed=0 Total=2
