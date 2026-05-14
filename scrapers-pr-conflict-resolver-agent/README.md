@@ -1,4 +1,4 @@
-# pr-conflict-resolver-agent
+# scrapers-pr-conflict-resolver-agent
 
 Daily AI conflict-resolver agent for `City-Bureau/city-scrapers*` repos whose
 `refresh-staging.yml` workflow skipped PRs due to merge conflicts against
@@ -6,7 +6,7 @@ Daily AI conflict-resolver agent for `City-Bureau/city-scrapers*` repos whose
 
 ## What it does
 
-Daily at 9 AM local (after `refresh-staging` at 3 AM and [`pr-review-agent`](../pr-review-agent)
+Daily at 9 AM local (after `refresh-staging` at 3 AM and [`scrapers-pr-review-agent`](../scrapers-pr-review-agent)
 at 8 AM) `launchd` fires [`daily-conflict-resolver.sh --apply`](./daily-conflict-resolver.sh),
 which:
 

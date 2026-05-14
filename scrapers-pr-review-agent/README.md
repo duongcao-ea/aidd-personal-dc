@@ -1,4 +1,4 @@
-# pr-review-agent
+# scrapers-pr-review-agent
 
 Daily AI code-review agent for open `City-Bureau/city-scrapers*` pull requests.
 
