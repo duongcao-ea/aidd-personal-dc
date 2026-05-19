@@ -1,60 +1,72 @@
 # aidd-personal-dc
 
-Personal AI-driven-development projects — local cron AI agents, SkyDeck.ai
-tool configs.
+Personal AI-driven-development workspace: scheduled, headless Claude agents
+and a versioned collection of SkyDeck.ai assistant configurations.
 
 ## Contents
 
-### [`ai-agents/`](./ai-agents/) — daily Claude-powered agents
+### [`ai-agents/`](./ai-agents/) — scheduled Claude agents
 
-| Agent | Schedule | What it does |
+`launchd`-scheduled agents that run headless `claude -p` against the
+`City-Bureau/city-scrapers*` repositories.
+
+| Agent | Schedule | Responsibility |
 |---|---|---|
-| [`scrapers-pr-review-agent`](./ai-agents/scrapers-pr-review-agent/) | 08:00 daily | Auto-reviews every open non-draft, non-dependabot scraper PR. Writes markdown to `~/pr-reviews/<repo>_PR<n>.md`. No GitHub posting. |
-| [`scrapers-pr-conflict-resolver-agent`](./ai-agents/scrapers-pr-conflict-resolver-agent/) | 09:00 daily | Reads each repo's latest `refresh-staging.yml` run, resolves any `Skipped: #N #M` conflicts via sandboxed Claude + deterministic `pipenv lock`, pushes the merge commits directly to `staging`. |
+| [`scrapers-pr-review-agent`](./ai-agents/scrapers-pr-review-agent/) | 08:00 daily | Reviews every open non-draft, non-dependabot scraper PR and writes the review to `~/pr-reviews/<repo>_PR<n>.md`. Does not post to GitHub. |
+| [`scrapers-pr-conflict-resolver-agent`](./ai-agents/scrapers-pr-conflict-resolver-agent/) | 09:00 daily | Reads each repo's latest `refresh-staging.yml` run, resolves any `Skipped: #N #M` conflicts via a sandboxed Claude plus deterministic `pipenv lock`, and pushes the merge commits to `staging`. |
 
-Both run as `launchd` jobs on macOS; both call headless `claude -p`.
-
-Run order is intentional: refresh-staging at 03:00 generates the conflict
-signal, review-agent at 08:00 produces reviews of every open PR, conflict-
-resolver at 09:00 closes the loop by getting the conflict-blocked PRs back
-into staging.
+Operational conventions common to both agents — platform, credentials,
+logging, and the daily run order — are documented in
+[`docs/agent-operations.md`](./docs/agent-operations.md).
 
 ### [`skydeck-ai-tools/`](./skydeck-ai-tools/) — SkyDeck.ai tool configs
 
-JSON configurations for [SkyDeck.ai](https://skydeck.ai/) personal
-assistants, plus their avatar images. Each `*.json` file is one configured
-tool (code analysis, debugging assistant, agile story master, etc.).
+The authoritative copies of personal [SkyDeck.ai](https://skydeck.ai/)
+assistant configurations, categorised under `tools/` (development, agile,
+writing, ideation) with source avatar artwork in `avatars/`. See
+[`skydeck-ai-tools/README.md`](./skydeck-ai-tools/README.md) for the full
+inventory and import/export workflow.
 
-## Layout
+## Repository layout
 
 ```
 aidd-personal-dc/
 ├── README.md
+├── LICENSE
+├── docs/
+│   └── agent-operations.md          # Conventions shared by all agents
 ├── ai-agents/
 │   ├── scrapers-pr-review-agent/
-│   │   ├── daily-pr-review.sh
-│   │   ├── com.duongcao.daily-pr-review.plist
 │   │   ├── README.md
-│   │   └── samples/
+│   │   ├── bin/                     # Executable wrapper
+│   │   ├── launchd/                 # launchd schedule
+│   │   └── samples/                 # Example run logs and output
 │   └── scrapers-pr-conflict-resolver-agent/
-│       ├── daily-conflict-resolver.sh
-│       ├── com.duongcao.daily-conflict-resolver.plist
 │       ├── README.md
+│       ├── bin/
+│       ├── launchd/
 │       └── samples/
 └── skydeck-ai-tools/
     ├── README.md
-    ├── avatars/
-    └── *.json
+    ├── avatars/                     # Source avatar artwork
+    └── tools/
+        ├── development/
+        ├── agile/
+        ├── writing/
+        └── ideation/
 ```
 
-## Shared conventions for the agents
+## Getting started
 
-- **macOS-only** — `launchd` plist paths are hard-coded to
-  `/Users/duongcaochanh/`.
-- **GitHub PAT in Keychain.** Both agents read `daily-pr-review-gh-pat` via
-  `security find-generic-password`. Needs push perms (`Contents: write` +
-  `Pull requests: write`, or classic `repo`).
-- **Logs live under `~/<output-dir>/_logs/`** — `~/pr-reviews/_logs/` for
-  the review agent, `~/pr-conflict-resolutions/_logs/` for the resolver.
+Each component is self-contained and documented in its own `README.md`:
 
-See each agent's `README.md` for install + manual-run instructions.
+- **Agents** — see the per-agent README for prerequisites, installation,
+  and manual-run instructions; see
+  [`docs/agent-operations.md`](./docs/agent-operations.md) for shared
+  conventions.
+- **SkyDeck.ai tools** — see
+  [`skydeck-ai-tools/README.md`](./skydeck-ai-tools/README.md).
+
+## License
+
+Released under the MIT License. See [`LICENSE`](./LICENSE).
