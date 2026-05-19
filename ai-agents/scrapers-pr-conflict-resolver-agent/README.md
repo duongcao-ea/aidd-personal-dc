@@ -1,73 +1,82 @@
 # scrapers-pr-conflict-resolver-agent
 
-Daily AI conflict-resolver agent for `City-Bureau/city-scrapers*` repos whose
-`refresh-staging.yml` workflow skipped PRs due to merge conflicts against
-`staging`.
+A scheduled AI agent that resolves merge conflicts for
+`City-Bureau/city-scrapers*` pull requests that the `refresh-staging.yml`
+workflow skipped because they conflict against `staging`.
 
-## What it does
+## Overview
 
-Daily at 9 AM local (after `refresh-staging` at 3 AM and [`scrapers-pr-review-agent`](../scrapers-pr-review-agent)
-at 8 AM) `launchd` fires [`daily-conflict-resolver.sh --apply`](./daily-conflict-resolver.sh),
+Each day at 09:00 local time — after `refresh-staging` (03:00) and the
+[`scrapers-pr-review-agent`](../scrapers-pr-review-agent) (08:00) —
+`launchd` runs
+[`bin/daily-conflict-resolver.sh --apply`](./bin/daily-conflict-resolver.sh),
 which:
 
-1. Scans every active `City-Bureau/city-scrapers*` repo for a
+1. Scans every active `City-Bureau/city-scrapers*` repository for a
    `refresh-staging.yml` workflow.
-2. For each such repo, reads the latest workflow run's `Skipped: #N #M` line
-   — those are the PRs `refresh-staging` itself reported as conflicting.
+2. Reads the latest workflow run's `Skipped: #N #M` line — the PRs
+   `refresh-staging` itself reported as conflicting.
 3. For each skipped PR:
-   - Clones a fresh copy under `/tmp/pr-conflict-resolver/<repo>_PR<num>/`.
-   - Trial-merges `pr-<num>` into `staging`.
-   - **Code conflicts** → invokes sandboxed `claude -p` (Read/Edit/Glob/Grep
-     plus read-only Bash). Prompt prefers the PR side on overlapping changes
-     and asks the agent to drop `# TODO(human): verify auto-resolved merge`
-     comments where it was uncertain.
-   - **`Pipfile.lock` conflict** → bypasses the AI and runs `pipenv lock`
-     against the merged `Pipfile`. Deterministic tool for a deterministic
-     problem.
-   - **External-contributor `Pipfile` change** (authorAssociation not in
-     `{OWNER, MEMBER, COLLABORATOR}`) → refuses to auto-lock; that PR is
-     bumped to manual review.
-4. Pushes the merge commit directly to `origin staging` (fast-forward-only
-   guard; refuses if `origin/staging` advanced since the clone).
+   - Clones a fresh copy under
+     `/tmp/pr-conflict-resolver/<repo>_PR<number>/`.
+   - Trial-merges `pr-<number>` into `staging`.
+   - **Code conflicts** are handed to a sandboxed `claude -p`
+     (Read/Edit/Glob/Grep plus read-only Bash). The prompt prefers the PR
+     side on overlapping changes and asks the agent to leave
+     `# TODO(human): verify auto-resolved merge` markers where it was
+     uncertain.
+   - **`Pipfile.lock` conflicts** bypass the AI and are resolved by running
+     `pipenv lock` against the merged `Pipfile` — a deterministic tool for
+     a deterministic problem.
+   - **External-contributor `Pipfile` changes** (author association not in
+     `{OWNER, MEMBER, COLLABORATOR}`) are refused and escalated to manual
+     review rather than auto-locked.
+4. Pushes the merge commit directly to `origin staging`, guarded so the
+   push is refused unless it is a fast-forward of `origin/staging`.
 5. Runs serially in `--apply` mode (`MAX_PARALLEL=1`) so concurrent pushes
-   to the same `staging` branch can't race.
+   to `staging` cannot race.
 
-Commits land under your global git identity (no `github-actions[bot]`, no
-co-author trailer).
+Commits are made under the global git identity — no `github-actions[bot]`
+and no co-author trailer.
 
-## Files
+## Directory layout
 
-| File | Purpose |
-|---|---|
-| `daily-conflict-resolver.sh` | Orchestrator. Install at `~/bin/daily-conflict-resolver.sh`. |
-| `com.duongcao.daily-conflict-resolver.plist` | launchd schedule (09:00 daily, `--apply`). Install at `~/Library/LaunchAgents/`. |
-| `samples/run-2026-05-14.log` | First production run on `city-scrapers-atl`: resolved 2 conflicting PRs (#205, #207). |
+```
+scrapers-pr-conflict-resolver-agent/
+├── README.md
+├── bin/
+│   └── daily-conflict-resolver.sh                  # Orchestrator (install to ~/bin/)
+├── launchd/
+│   └── com.duongcao.daily-conflict-resolver.plist  # Schedule (install to ~/Library/LaunchAgents/)
+└── samples/
+    └── run-2026-05-14.log                          # First production run: city-scrapers-atl, PRs #205 & #207
+```
 
 ## Prerequisites
 
-- `claude` CLI authenticated.
-- `gh` CLI authenticated as `duongcao-ea`.
-- `pipenv` available via `pyenv` (script auto-picks the highest pyenv
-  interpreter that has `pipenv` installed and matches `Pipfile`'s
+- `claude` CLI, authenticated.
+- `gh` CLI, authenticated as `duongcao-ea`.
+- `pipenv` available via `pyenv` (the script auto-selects the highest
+  `pyenv` interpreter that has `pipenv` and matches the `Pipfile`
   `python_version`).
-- macOS Keychain entry `daily-pr-review-gh-pat` containing a GitHub PAT with
+- A macOS Keychain entry `daily-pr-review-gh-pat` holding a GitHub PAT with
   push permission (`Contents: write` + `Pull requests: write`, or classic
-  `repo`). Reuses the same entry as `pr-review-agent`.
-- macOS — paths in the plist are hard-coded for `/Users/duongcaochanh/`.
+  `repo`). This is the same entry used by the pr-review-agent.
+- macOS — the launchd plist paths are hard-coded for `/Users/duongcaochanh/`.
 
-## Install
+## Installation
 
 ```bash
-cp daily-conflict-resolver.sh ~/bin/daily-conflict-resolver.sh
+cp bin/daily-conflict-resolver.sh ~/bin/daily-conflict-resolver.sh
 chmod +x ~/bin/daily-conflict-resolver.sh
-cp com.duongcao.daily-conflict-resolver.plist ~/Library/LaunchAgents/
+cp launchd/com.duongcao.daily-conflict-resolver.plist ~/Library/LaunchAgents/
 launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/com.duongcao.daily-conflict-resolver.plist
 ```
 
 ## Manual run
 
 ```bash
-# Dry-run (default): resolve locally, log intended changes, no push.
+# Dry run (default): resolve locally, log intended changes, no push.
 bash ~/bin/daily-conflict-resolver.sh
 bash ~/bin/daily-conflict-resolver.sh --repo city-scrapers-atl
 
@@ -76,39 +85,44 @@ bash ~/bin/daily-conflict-resolver.sh --apply
 bash ~/bin/daily-conflict-resolver.sh --repo city-scrapers-atl --apply
 ```
 
-Logs land in `~/pr-conflict-resolutions/_logs/run-<date>.log` (orchestrator)
-and `~/pr-conflict-resolutions/_logs/<repo>_PR<num>.log` (per-task Claude
-transcripts + git output).
+## Logs
+
+- Orchestrator: `~/pr-conflict-resolutions/_logs/run-<date>.log`
+- Per-PR Claude transcript and git output:
+  `~/pr-conflict-resolutions/_logs/<repo>_PR<number>.log`
 
 ## Safety properties
 
-- **Never pushes to `staging` if our merge isn't a fast-forward of
-  `origin/staging`.** Race condition → skip + retry next run.
-- **Idempotent.** A second run after a successful one no longer finds the PR
-  in refresh-staging's `Skipped:` list (because the conflict is gone), so
-  nothing re-pushes.
-- **No conflict markers ever get committed.** Sanity-check after AI resolution.
-- **External-contributor `Pipfile` changes → human review.** Bounds the
-  trust escalation when running `pipenv lock` against PRs from the public
+- **Fast-forward only.** A push to `staging` is refused unless the merge is
+  a fast-forward of `origin/staging`; a race condition causes a skip and
+  retry on the next run.
+- **Idempotent.** After a successful resolution the PR no longer appears in
+  `refresh-staging`'s `Skipped:` list, so a subsequent run pushes nothing.
+- **No conflict markers are ever committed.** A sanity check runs after AI
+  resolution.
+- **External-contributor `Pipfile` changes go to human review,** bounding
+  the trust escalation of running `pipenv lock` on PRs from the public
   internet.
-- **Recovery.** If a resolution turns out to be wrong, `git revert
-  <merge-sha>` on `staging` and re-trigger `refresh-staging.yml`.
+- **Recoverable.** If a resolution is wrong, `git revert <merge-sha>` on
+  `staging` and re-trigger `refresh-staging.yml`.
 
-## Architectural choices
+## Design decisions
 
-- **Why parse `refresh-staging`'s `Skipped:` line instead of trial-merging
-  every PR?** refresh-staging already did the merge attempt and filtered out
-  drafts/bots. Re-doing that work is wasteful and reaches different
-  conclusions when timing differs (e.g., GitHub's async `mergeable` field
+- **Parse `refresh-staging`'s `Skipped:` line rather than re-trial-merging
+  every PR.** `refresh-staging` already attempted the merge and filtered out
+  drafts and bots; redoing that work is wasteful and reaches different
+  conclusions when timing differs (GitHub's asynchronous `mergeable` field
   reflects PR-vs-base, not PR-vs-staging).
-- **Why `pipenv lock` instead of having the AI edit `Pipfile.lock`?**
-  Lockfiles are *derived* artifacts. The mechanically-correct resolution is
-  to rerun the generating tool against the merged manifest, not to merge
-  content by hand. Earlier attempts at letting the AI edit lockfiles
-  discarded one side's transitive deps silently.
-- **Why push to `staging` directly instead of opening a follow-up PR?**
-  Same trust posture as `refresh-staging.yml` (which also auto-pushes
-  staging unattended). A follow-up PR adds a click that nobody clicks.
-- **Why serialize pushes (`MAX_PARALLEL=1`) in apply mode?** Parallel
-  workers on the same `staging` branch produce non-fast-forward pushes
-  that get rejected. Serial is simpler than fetch-rebase-retry loops.
+- **Run `pipenv lock` instead of letting the AI edit `Pipfile.lock`.**
+  Lockfiles are derived artifacts; the correct resolution is to rerun the
+  generating tool against the merged manifest. Earlier attempts at AI-edited
+  lockfiles silently dropped one side's transitive dependencies.
+- **Push to `staging` directly rather than opening a follow-up PR.** This
+  matches the trust posture of `refresh-staging.yml`, which also pushes
+  `staging` unattended; a follow-up PR adds a click nobody makes.
+- **Serialize pushes (`MAX_PARALLEL=1`) in apply mode.** Parallel workers on
+  the same `staging` branch produce non-fast-forward pushes that are
+  rejected; serial execution is simpler than fetch-rebase-retry loops.
+
+See [`../../docs/agent-operations.md`](../../docs/agent-operations.md) for
+conventions shared with the other agents.
