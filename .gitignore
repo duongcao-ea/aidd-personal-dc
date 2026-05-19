@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Local agent runtime output. These directories are created under $HOME at
+# run time and must never be committed; listed here as a guard against
+# accidental in-repo copies during development.
+pr-reviews/
+pr-conflict-resolutions/
+_logs/
+
+# Curated sample logs under samples/ are intentionally tracked.
+!**/samples/**
+
+# Python (pipenv is invoked by the conflict-resolver agent)
+__pycache__/
+*.pyc
+.venv/
