@@ -19,6 +19,14 @@ Operational conventions common to both agents — platform, credentials,
 logging, and the daily run order — are documented in
 [`docs/agent-operations.md`](./docs/agent-operations.md).
 
+### [`claude-skills/`](./claude-skills/) — invocable Claude Code skills
+
+Drop-in skill bundles for `.claude/skills/`. Currently includes
+[`city-scrapers/`](./claude-skills/city-scrapers/) — code-review,
+merge-staging, and refresh-staging-scraped-data skills for the
+[City-Bureau/city-scrapers](https://github.com/City-Bureau/city-scrapers)
+family of repos.
+
 ### [`skydeck-ai-tools/`](./skydeck-ai-tools/) — SkyDeck.ai tool configs
 
 The authoritative copies of personal [SkyDeck.ai](https://skydeck.ai/)
@@ -46,6 +54,12 @@ aidd-personal-dc/
 │       ├── bin/
 │       ├── launchd/
 │       └── samples/
+├── claude-skills/
+│   └── city-scrapers/
+│       ├── README.md
+│       ├── code-review/SKILL.md
+│       ├── merge-staging/SKILL.md
+│       └── refresh-staging-scraped-data/SKILL.md
 └── skydeck-ai-tools/
     ├── README.md
     ├── avatars/                     # Source avatar artwork
