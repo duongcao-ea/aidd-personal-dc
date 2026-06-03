@@ -10,7 +10,8 @@ Drop the contents of any of these folders into your project's `.claude/skills/` 
 |---|---|
 | [`code-review/`](./code-review/) | Code-review a scraper PR. Checks output JSON, spider conventions, Scrapy-specific anti-patterns, test coverage. Saves the review to `PR<number>_REVIEW.md`. |
 | [`merge-staging/`](./merge-staging/) | Merge every open non-dependabot, non-draft PR into the `staging` branch. Runs lint + tests after each merge, pushes when green. |
-| [`refresh-staging-scraped-data/`](./refresh-staging-scraped-data/) | Wipe Azure staging blobs, re-run the staging scrape, and re-trigger the Documenters meeting-feed import via Heroku CLI. The Heroku app name is a `<your-staging-app>` placeholder — replace with your env's actual staging app, or thread it through a shell variable before using. |
+| [`refresh-staging-scraped-data/`](./refresh-staging-scraped-data/) | Wipe Azure staging blobs, re-run the staging scrape, and re-trigger the Documenters meeting-feed import via Heroku CLI. Includes pre-flight checks (verify `program.meetings_feed_endpoint` points at the staging container, not prod), a scoped-delete variant (refresh only the N spiders that changed), and a `Meeting`-model schema reference. Heroku app name is a `<your-staging-app>` placeholder — replace with your env's actual staging app, or thread it through a shell variable. |
+| [`setup-staging-workflow/`](./setup-staging-workflow/) | Scaffold the staging environment in a `city-scrapers-*` fork that doesn't have one yet: writes `city_scrapers/settings/staging.py` and `.github/workflows/staging.yml` mirroring the minimal `city-scrapers-coloh` pattern, audits GitHub Actions secrets via `gh secret list`, and walks the off-repo follow-ups (create `staging` branch, create Azure staging container). |
 
 ## How invocation works
 

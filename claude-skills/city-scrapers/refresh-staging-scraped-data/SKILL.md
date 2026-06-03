@@ -36,7 +36,30 @@ PROGRAM_SLUG=columbia-gorge
 PROGRAM_NAME=columbia
 ```
 
+`.env` is gitignored — confirm with `grep '^\.env$' .gitignore` before writing,
+and verify the file is not staged before any commit.
+
 **IMPORTANT**: Heroku app is hardcoded to `<your-staging-app>` to prevent accidental production data loss.
+
+### Convention (surveyed from sibling repos)
+
+| Repo                 | AZURE_CONTAINER              | PROGRAM_SLUG     | PROGRAM_NAME    |
+|----------------------|------------------------------|------------------|-----------------|
+| city-scrapers-omaha  | `meetings-feed-oma-stg`      | `omaha`          | `omaha`         |
+| city-scrapers-coloh  | `meetings-feed-coloh-stg`    | `columbus`       | `columbus`      |
+| city-scrapers-colgo  | `meetings-feed-colgo-stg`    | `columbia-gorge` | `columbia`      |
+| city-scrapers-atl    | `meetings-feed-atl-stg`      | `atlanta`        | `atlanta`       |
+| city-scrapers-fortx  | `meetings-feed-fortx-stg`    | `fort-worth`     | `fort worth`    |
+| city-scrapers-losca  | `meetings-feed-losca-stg`    | `los-angeles`    | `los angeles`   |
+| city-scrapers-lascruc| `meetings-feed-lacrnm-stg`   | `las-cruces`     | `las cruces`    |
+| city-scrapers-charnc | `meetings-feed-charnc-stg`   | `charlotte`      | `charlotte`     |
+| city-scrapers-kancit | `meetings-feed-kancit-stg`   | `kansas-city`    | `kansas`        |
+| city-scrapers-san-diego | `meetings-feed-sandie-stg`| `san-diego`      | `san diego`     |
+
+**Pattern**: `PROGRAM_SLUG` is the dasherized city name; `PROGRAM_NAME` is the
+space-separated form for `name__icontains` lookups (sometimes a shorter partial
+match like `columbia` for `columbia-gorge` or `kansas` for `kansas-city`).
+**Verify against the actual program in <your-staging-app>** — see Step 10.5.
 
 ## Process
 
@@ -176,13 +199,63 @@ There will be 2 jobs triggered:
 
 Wait for the **crawl** job to finish before proceeding to Step 11.
 
+### Step 10.5: Pre-flight — Verify program feed endpoint
+
+**This step is easy to skip and costly to miss.** The omaha incident:
+<your-staging-app> had `program.meetings_feed_endpoint` pointing at the **prod**
+container (`meetings-feed-oma/latest.json`), not staging. Importing without
+fixing this pulled prod data and silently defeated the whole refresh.
+
+Probe first:
+
+```bash
+heroku run --no-tty -a <your-staging-app> python manage.py shell <<'PYEOF'
+from documenters.accounts.models import Program
+from documenters.meetings.models import Meeting
+
+p = Program.objects.filter(slug='$PROGRAM_SLUG').first()
+if not p:
+    matches = list(Program.objects.filter(slug__icontains='$PROGRAM_SLUG').values_list('slug','name'))
+    print('NO EXACT slug. Similar:', matches)
+else:
+    print(f'slug={p.slug} name={p.name}')
+    print(f'feed_endpoint={p.meetings_feed_endpoint}')
+    pm = Meeting.objects.filter(programs__slug=p.slug)
+    print(f'total={pm.count()} with_assign={pm.filter(assignments__isnull=False).distinct().count()} without_assign={pm.filter(assignments__isnull=True).distinct().count()}')
+PYEOF
+```
+
+Check the output:
+
+- **`feed_endpoint` must contain `-stg/latest.json`** (e.g. `meetings-feed-oma-stg/latest.json`).
+  If it points at the prod container (no `-stg`), update it before importing.
+- Note the total / with_assign / without_assign counts — Step 11 should match these.
+
+Update the endpoint if needed (replace `$PROGRAM_SLUG` and the new URL):
+
+```bash
+heroku run --no-tty -a <your-staging-app> python manage.py shell <<'PYEOF'
+from documenters.accounts.models import Program
+p = Program.objects.get(slug='$PROGRAM_SLUG')
+print(f'OLD: {p.meetings_feed_endpoint}')
+p.meetings_feed_endpoint = 'https://cityscrapers.blob.core.windows.net/$AZURE_CONTAINER/latest.json'
+p.save(update_fields=['meetings_feed_endpoint'])
+p.refresh_from_db()
+print(f'NEW: {p.meetings_feed_endpoint}')
+PYEOF
+```
+
 ### Step 11: Delete Meetings Without Assignments
 
 **Wait for scraping to complete first!**
 
 Ask user to confirm the scraping cron has completed successfully.
 
-Then run the delete script via Heroku:
+Two variants — pick based on intent:
+
+**Variant A — Full reset (default).** Wipes every meeting for the program that
+has no assignments. Right when you've refreshed all spiders and want a clean
+slate:
 
 ```bash
 export $(grep -v '^#' .env | xargs)
@@ -203,6 +276,72 @@ without_assignments.delete()
 print('Deleted meetings without assignments')
 EOF
 ```
+
+**Variant B — Scoped to specific spiders.** Right when only a few spiders
+changed and you don't want to wipe history from untouched spiders. Filter by
+`scraper_id__startswith='<spider_name>/'` — the `scraper_id` format is
+`<spider>/<datetime>/<hash>/<slug>`.
+
+```bash
+heroku run --no-tty -a <your-staging-app> python manage.py shell <<'PYEOF'
+from documenters.meetings.models import Meeting
+
+TARGET = ('oma_mud', 'oma_municipal_bank', 'oma_public_schools_boe')  # edit
+qs = Meeting.objects.filter(programs__slug='$PROGRAM_SLUG')
+
+# probe first
+for sp in TARGET:
+    sp_qs = qs.filter(scraper_id__startswith=f'{sp}/')
+    sp_no_assign = sp_qs.filter(assignments__isnull=True).distinct()
+    print(f'{sp}: total={sp_qs.count()} no_assign={sp_no_assign.count()}')
+
+# then delete
+for sp in TARGET:
+    sp_qs = qs.filter(scraper_id__startswith=f'{sp}/').filter(assignments__isnull=True).distinct()
+    n = sp_qs.count()
+    if n:
+        sp_qs.delete()
+        print(f'{sp}: deleted {n}')
+PYEOF
+```
+
+When a spider you target has 0 meetings in the DB (e.g. brand-new spider just
+merged), the loop is a no-op — that's expected. The Step 12 import will create
+them fresh.
+
+### Step 11.5: Verify staging feed before queueing import
+
+The import will pull whatever lives at `meetings-feed-<slug>-stg/latest.json`.
+Confirm the blob exists and contains the items you expect — this catches the
+case where `combinefeeds` didn't run or wrote 0 items:
+
+```bash
+export $(grep -v '^#' .env | xargs)
+
+az storage blob exists \
+  --account-name "$AZURE_ACCOUNT_NAME" --account-key "$AZURE_ACCOUNT_KEY" \
+  --container-name "$AZURE_CONTAINER" --name latest.json --output json
+
+az storage blob download \
+  --account-name "$AZURE_ACCOUNT_NAME" --account-key "$AZURE_ACCOUNT_KEY" \
+  --container-name "$AZURE_CONTAINER" --name latest.json \
+  --file /tmp/latest.json --no-progress
+
+python3 -c "
+import json
+from collections import Counter
+data=[json.loads(l) for l in open('/tmp/latest.json')]
+print(f'total items: {len(data)}')
+by_agency=Counter(d.get('extras',{}).get('cityscrapers/agency','?') for d in data)
+for a,c in by_agency.most_common():
+    print(f'  {c:>4}  {a}')
+"
+```
+
+Expected: total > 0, and the agencies you just refreshed appear with reasonable
+counts. If a spider you expect is missing or has 0 items, investigate the
+GitHub Actions log before queueing — importing an empty/broken feed wastes a
+trip through the dyno.
 
 ### Step 12: Run Import Data
 
@@ -300,3 +439,42 @@ Report summary:
   - `PROGRAM_SLUG` - the program slug in the database (e.g., `columbia-gorge`)
   - `PROGRAM_NAME` - partial name match for the program (e.g., `columbia`)
 - Heroku app is **always** `<your-staging-app>` (hardcoded to prevent production accidents)
+
+## Reference: Meeting model (documenters)
+
+Fields relevant to this skill, with the lookup patterns we actually use:
+
+| Field            | Type          | Lookup we use                              |
+|------------------|---------------|---------------------------------------------|
+| `programs`       | M2M → Program | `programs__slug='omaha'`                    |
+| `scraper_id`     | str           | `scraper_id__startswith='oma_mud/'`         |
+| `assignments`    | reverse FK    | `assignments__isnull=True`                  |
+| `data`           | JSON          | original OCD-event from feed                |
+| `agency`         | FK → Agency   | human-readable agency name                  |
+| `start_date`/`start_time` | date/time | scheduling                            |
+| `name`           | str           | meeting title                               |
+
+`scraper_id` format: `<spider_name>/<YYYYMMDDHHMM>/<hash>/<slug>`.
+Example: `oma_mud/202507021300/x/committee_and_board_meetings`.
+Splitting on the first `/` gives the spider name — used for the Variant B
+scoped delete in Step 11.
+
+`data['extras']` mirrors the city_scrapers extras; useful keys:
+- `cityscrapers.org/id` (older feeds) or `cityscrapers/id` (newer) — original spider id
+- `cityscrapers/agency` — human-readable agency name
+- `cityscrapers/address`, `cityscrapers/time_notes`
+
+## Anti-patterns learned the hard way
+
+1. **Importing before fixing `meetings_feed_endpoint`** — silently pulls prod
+   data. Always run Step 10.5 first.
+2. **Wide deletes when only N spiders changed** — Variant A wipes all
+   without-assignment meetings; that nukes history from spiders you didn't
+   touch. Prefer Variant B (scoped) for incremental refreshes.
+3. **Skipping the staging feed inspection** — queueing an import against an
+   empty `latest.json` looks identical to a successful run until you check the
+   counts in Step 14. Step 11.5 catches it ~30s earlier.
+4. **Trusting that `scraper_id` matches the spider name as a substring** — it
+   doesn't, because other spider names can be prefixes (e.g. `oma_planning`
+   prefixes `oma_planning_exam_engineers`). Always use
+   `__startswith=f'{spider}/'` with the trailing `/` to anchor at the boundary.
