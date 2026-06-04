@@ -780,8 +780,38 @@ Sanity checks:
 
 ### Step 9: Re-import the feed
 
+**9a. Enable `SKIP_AZURE_BLOB_DATA_CHECK=true` on documenters-prod before the re-import.**
+
+`documenters/meetings/tasks.py:77` short-circuits when an incoming meeting's blob content equals what's already in Azure — it returns *before* calling `handle_azure_meeting`, which means it never re-runs the agency lookup. This is the right behavior for normal cron-driven imports, but it's wrong for releases:
+
+- Brand-new spider just wired to an agency → the per-meeting blobs already exist (the scraper run wrote them in Step 6) but match the feed content exactly → importer short-circuits → agency lookup never re-runs → records you expected to land don't.
+- Same trap if an earlier re-import in this session ran before the agency was wired (the "recovery path" in the multi-spider section above).
+
+The fix is to flip `SKIP_AZURE_BLOB_DATA_CHECK=true` so the short-circuit is bypassed. It's a per-app config var:
+
 ```bash
-heroku run --no-tty -a documenters-prod python manage.py shell <<PYEOF
+# Check current value first
+heroku config:get SKIP_AZURE_BLOB_DATA_CHECK -a documenters-prod
+
+# Enable (this triggers a dyno restart — the new env var takes ~30s to propagate)
+heroku config:set SKIP_AZURE_BLOB_DATA_CHECK=true -a documenters-prod
+```
+
+⚠️ The `heroku config:set` restart is fast for the CLI command but propagation takes a moment. **Wait for the restart to settle** before enqueueing — a `heroku run` shell started before the new release applies will still see the old env. Verify with:
+
+```bash
+heroku run --no-tty -a documenters-prod -- python manage.py shell <<'PYEOF'
+from django.conf import settings
+print(f"SKIP_AZURE_BLOB_DATA_CHECK = {settings.SKIP_AZURE_BLOB_DATA_CHECK}")
+PYEOF
+```
+
+The value must read `True` before you proceed.
+
+**9b. Enqueue the re-import (once per Program — see the multi-spider section):**
+
+```bash
+heroku run --no-tty -a documenters-prod -- python manage.py shell <<PYEOF
 from documenters.accounts.models import Program
 from documenters.meetings.tasks import handle_meetings_feed_endpoint
 
@@ -790,9 +820,21 @@ print(f"Program: {program.name}")
 print(f"Feed endpoint: {program.meetings_feed_endpoint}")
 
 result = handle_meetings_feed_endpoint.send(program.meetings_feed_endpoint)
-print(f"Enqueued: {result}")
+print(f"Enqueued message_id: {result.message_id}")
 PYEOF
 ```
+
+**9c. After verify (Step 10), decide whether to unset the flag.**
+
+Leaving `SKIP_AZURE_BLOB_DATA_CHECK=true` indefinitely means every future scheduled import re-runs `handle_azure_meeting` for every unchanged blob — heavier worker load, longer drain time, more Basecamp/email traffic from any side effects in that path. The flag is meant for **releases**, not steady state.
+
+Once you've verified the release landed:
+
+```bash
+heroku config:unset SKIP_AZURE_BLOB_DATA_CHECK -a documenters-prod
+```
+
+If you're releasing multiple spiders in the same session and across different Programs, leave the flag on until **all** are done — then unset.
 
 Tell the user to monitor:
 
