@@ -853,9 +853,59 @@ When done, summarize:
 - **`scraped()` queryset method missing** → fall back is **not** allowed — surface the AttributeError and ask user, since dropping the filter would mass-delete manually-created meetings.
 - **Worker logs show errors during import** → stop the skill, surface errors, ask user before any retry.
 
+## Releasing multiple scrapers from the same Program in one session
+
+> 🔴 **Critical ordering rule.** The feed endpoint is per-Program, not per-spider — a single `handle_meetings_feed_endpoint` call ingests **every** spider's records from `latest.json` at once. If any spider's `Agency.scraper_names` doesn't yet contain the spider, those records are **silently dropped** on that import (the documenters importer logs INFO only; no error). Re-running the import after wiring the agency catches them, but only because the feed hasn't changed yet — if the cron has run in between, the dropped records may be gone.
+
+When you're releasing two or more spiders that share a Program (e.g. `daltx_school_district` + `daltx_ccc`, both in the `dallas` Program), do **not** run the per-scraper flow end-to-end serially. Instead, batch the steps that touch the shared feed:
+
+**Batched per-program flow:**
+
+1. **Per-spider, in parallel where possible (Steps 0–4):**
+   - Discover, merge each PR to `main`, run lint + tests on `main`.
+
+2. **Once per Program (Step 5 + Step 6):**
+   - Clear last 7 days of Azure blobs for **each** spider being released (loop the cleanup; the blobs are distinct files per spider).
+   - Cancel any in-progress Cron runs (Step 6 pre-trigger).
+   - Trigger the Cron **once** for the repo. The workflow runs all spiders; a single fresh `latest.json` covers every spider in the Program.
+
+3. **Per-spider gate (Step 6.5):**
+   - Verify `latest.json` contains records for **each** spider being released. If any spider's HITS is 0, halt — don't proceed for any of them, since they share the same import call.
+
+4. **Batch agency upserts (Step 6.6 for ALL spiders) — do this BEFORE any re-import:**
+   - Loop the upsert across every spider being released. Confirm `scraper_names` contains the right spider and `is_testing_scraper=False` for each.
+   - Only after **every** agency is wired correctly do you move to Step 7.
+
+5. **Per-spider preview + delete (Steps 7–8):**
+   - For each spider in turn, run the preview filter triplet and ask for explicit y/N before deleting. Different spiders have different prior-meeting counts and different assignment histories — surface them separately.
+
+6. **Single re-import (Step 9) — once per Program, not once per spider:**
+   - Enqueue `handle_meetings_feed_endpoint` exactly once for the Program's feed endpoint. This processes every spider's records from `latest.json` in one pass.
+   - **Wait until the worker drains** before moving on. Tail `heroku logs --tail -a documenters-prod --dyno worker` and watch for the run-end log lines or `Updated meeting with id …` traffic to quiet down. A typical multi-spider feed takes ~30s–5min depending on record count.
+   - Do **not** enqueue a second import for the next spider in the same Program — that's redundant and adds load. The single call already handled them.
+
+7. **Per-spider verify (Step 10):**
+   - For each spider, query post-import counts (total / with assignments / without). Spot-check on documenters.org.
+
+**Why this ordering matters:**
+
+- **Wiring before import:** If you upsert spider A's agency, re-import, then upsert spider B's agency and re-import again, spider B's records were silently dropped on the first import — you only recover them because the feed hasn't changed yet. If the cron fires (or you trigger another run) between the two imports, those records are gone for good in this session.
+- **Single import call:** Each `handle_meetings_feed_endpoint` call walks the whole feed. Multiple calls are wasted work and produce duplicate worker log noise that hides real errors.
+- **Wait for drain before next spider verify:** Counts during an in-flight import are unstable. Reading them before drain produces misleading "0 imported, did it drop them?" panic.
+
+**Recovery if you got the ordering wrong:**
+
+If you already enqueued the import before wiring all agencies (the mistake to avoid), the fix is:
+
+1. Upsert the missing agency now.
+2. Re-enqueue `handle_meetings_feed_endpoint` for the same Program. Idempotent — already-imported records are no-ops; previously-dropped records get picked up.
+3. Verify counts for both spiders after drain.
+
+Don't try to "patch" the missing meetings manually — re-running the import is the right fix.
+
 ## Notes
 
-- The skill is **per-scraper**, not per-program. Different scrapers under the same program (e.g. `fortx_Fort_Worth_Public_Meetings` vs `fortx_Fort_Worth_Boards`) must be released independently.
+- The skill is **per-scraper**, not per-program for the merge/Azure/agency/preview/delete steps. But the **import is per-Program** — see the "Releasing multiple scrapers from the same Program" section above when more than one spider in the same Program is being released in the same session.
 - The same flow works for fixes (replace a buggy version of the scraper) and for cleanups (purge stale meetings produced by an older version).
 - For larger refactors that change multiple scrapers in a program, run this skill once per affected `SPIDER_NAME` rather than relaxing the filter.
 - Do **not** auto-merge dependabot PRs as part of this flow — they should go through their normal review.
