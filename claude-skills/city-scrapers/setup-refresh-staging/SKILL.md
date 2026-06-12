@@ -175,10 +175,11 @@ Restrict the environment so its secrets can only be used from the `staging`
 branch (matches `fortx`: `custom_branch_policies: true`).
 
 ```bash
-# Enable custom branch policies on the environment
+# Enable custom branch policies on the environment.
+# NOTE: use -F (typed) not -f (string) — the API rejects "true"/"false" strings.
 gh api -X PUT repos/$REPO/environments/staging \
-  -f 'deployment_branch_policy[protected_branches]=false' \
-  -f 'deployment_branch_policy[custom_branch_policies]=true' >/dev/null
+  -F 'deployment_branch_policy[protected_branches]=false' \
+  -F 'deployment_branch_policy[custom_branch_policies]=true' >/dev/null
 
 # Add `staging` as the only allowed deployment branch
 gh api -X POST repos/$REPO/environments/staging/deployment-branch-policies \
