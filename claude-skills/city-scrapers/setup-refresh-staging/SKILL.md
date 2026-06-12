@@ -22,9 +22,9 @@ refresh-db          (Documenters-linked only) delete no-assignment staging
 workflow-keepalive  keep the scheduled workflow from being auto-disabled
 ```
 
-## The four components this skill installs
+## The five components this skill installs
 
-A working refresh-staging needs **all four** — a missing one makes the workflow
+A working refresh-staging needs **all five** — a missing one makes the workflow
 fail silently or at the first job:
 
 1. **Workflow file** — `.github/workflows/refresh-staging.yml` (template in
@@ -36,6 +36,10 @@ fail silently or at the first job:
 4. **Environment protection rule** — a deployment-branch policy restricting the
    `staging` environment to the `staging` branch, so the env's secrets can't be
    exercised from arbitrary branches.
+5. **Branch rulesets** (repo-level) — `Protect main` + `Protect staging` rulesets
+   matching the family convention. Easy to forget; check for it explicitly with
+   `gh api repos/$REPO/rulesets`. Without them the repo is unprotected even
+   though the env policy exists.
 
 ## Prerequisites — basic staging must already exist
 
@@ -192,6 +196,41 @@ Verify:
 gh api repos/$REPO/environments/staging --jq '{protection_rules, deployment_branch_policy}'
 gh api repos/$REPO/environments/staging/deployment-branch-policies --jq '.branch_policies[].name'
 ```
+
+## Step 4b — Branch rulesets (repo-level protection)
+
+The family convention protects both branches with **repository rulesets** (not
+classic branch protection — `branches/<b>/protection` returns 404 on these
+repos). Check what a reference repo has and replicate:
+
+```bash
+gh api repos/City-Bureau/city-scrapers-fortx/rulesets --jq '.[] | "\(.id) \(.name)"'
+gh api repos/City-Bureau/city-scrapers-fortx/rulesets/<id> --jq '{name,conditions,rules:[.rules[]|{type,parameters}],bypass_actors}'
+gh api repos/$REPO/rulesets --jq '.[].name'   # what the target repo already has
+```
+
+Canonical shape (fortx):
+
+- **Protect main** — `rules`: `deletion`, `non_fast_forward`,
+  `pull_request` (`required_approving_review_count: 1`,
+  `require_code_owner_review: true`, merge methods merge/squash/rebase).
+- **Protect staging** — `rules`: `deletion`, `non_fast_forward`, `update`.
+- Both: `bypass_actors: [{actor_id: 5, actor_type: RepositoryRole, bypass_mode: always}]`
+  — `actor_id 5` is the **Admin** repo role. This bypass is what lets the
+  `merge-and-prepare` job `git push origin staging` succeed against the `update`
+  / `non_fast_forward` rules — **so the `GH_PAT` must belong to a repo admin.**
+
+Create them (write each body to a file, POST with `--input`):
+
+```bash
+gh api -X POST repos/$REPO/rulesets --input rs_main.json    --jq '{id,name,enforcement}'
+gh api -X POST repos/$REPO/rulesets --input rs_staging.json --jq '{id,name,enforcement}'
+```
+
+Implications to surface to the user before creating:
+- `Protect main` makes PRs to the default branch require an approval — an open
+  setup PR will then need an admin-bypass merge.
+- `require_code_owner_review` only bites if the repo has a `CODEOWNERS` file.
 
 ## Step 5 — Commit on a feature branch and open a PR
 
