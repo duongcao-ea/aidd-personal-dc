@@ -265,6 +265,36 @@ Watch that `merge-and-prepare` reaches "Push staging", `crawl` writes a fresh
 import without error. A missing secret shows up as an immediate job failure with
 a masked `***` in the log.
 
+### ⚠️ `merge-and-prepare` merges EVERY ready non-bot PR — scope it before dispatch
+
+The first job merges **all** open PRs where `author.is_bot == false` and
+`isDraft == false` into `staging`. It does **not** filter by date, label, or
+title — dispatching the workflow will pull *every* ready human PR into staging,
+not just the ones you care about. Dependabot/bot PRs are auto-excluded.
+
+Before a test (or any) dispatch, list what will be merged and confirm with the
+user:
+
+```bash
+gh pr list -R $REPO --state open --json number,title,author,isDraft \
+  --jq '.[] | select(.isDraft==false and (.author.login|startswith("app/")|not)) | "#\(.number) \(.title) [@\(.author.login)]"'
+```
+
+To **scope** the run to a subset (e.g. only the current sprint's scraper PRs),
+temporarily convert the PRs you want skipped to **draft** (reversible — the
+workflow skips drafts), dispatch, then restore them:
+
+```bash
+gh pr ready <N> --undo -R $REPO   # → draft, excluded from the run
+# ... dispatch + watch ...
+gh pr ready <N> -R $REPO          # restore to "ready" afterward
+```
+
+Also note: only the workflow on the **default branch** is dispatchable/scheduled
+(GitHub honors `schedule` and `workflow_dispatch` only there). Merging the
+workflow onto `staging` alone does **not** make it runnable — it must be on the
+default branch first, even though every effect it has is staging-side.
+
 ## Safety rules
 
 - **Never print a secret value.** Use `$(cmd)` substitution or hand the
