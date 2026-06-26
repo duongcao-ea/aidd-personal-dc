@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git show:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge-base:*)",
+      "Bash(git stash list:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh secret list:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh api:*)",
+      "Bash(gh workflow list:*)",
+      "Bash(pipenv --venv:*)",
+      "Bash(pipenv sync:*)",
+      "Bash(pipenv run pytest:*)",
+      "Bash(pipenv run isort:*)",
+      "Bash(pipenv run black:*)",
+      "Bash(pipenv run flake8:*)",
+      "Bash(pipenv run scrapy list:*)",
+      "Bash(pipenv run scrapy validate:*)",
+      "Bash(pipenv run scrapy parse:*)",
+      "Bash(pipenv run scrapy crawl:*)",
+      "Bash(pipenv run python:*)",
+      "Bash(pipenv graph:*)",
+      "Bash(az storage blob list:*)",
+      "Bash(az storage blob exists:*)",
+      "Bash(az storage blob show:*)",
+      "Bash(az storage blob download:*)",
+      "Bash(az storage container show:*)",
+      "Bash(python3 -c:*)",
+      "Bash(python3 -m json.tool:*)",
+      "Bash(jq:*)",
+      "Bash(curl -s:*)",
+      "Bash(curl -sS:*)",
+      "Bash(curl -sI:*)",
+      "Bash(diff:*)",
+      "Bash(wc:*)",
+      "Bash(file:*)"
+    ],
+    "deny": [
+      "Bash(git push origin main:*)",
+      "Bash(git push origin master:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(rm -rf:*)",
+      "Bash(heroku run:*)",
+      "Bash(heroku config:set:*)",
+      "Bash(heroku config:unset:*)",
+      "Bash(heroku apps:destroy:*)",
+      "Bash(az storage blob delete:*)",
+      "Bash(az storage blob delete-batch:*)",
+      "Bash(az storage container delete:*)",
+      "Bash(gh repo delete:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh secret delete:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/format-python.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

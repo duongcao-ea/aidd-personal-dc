@@ -47,6 +47,13 @@ headless flows.)
 Global `/<name>` commands (`~/.claude/commands/*.md`). Currently `/pr-review` —
 a parallel-agent, verified-at-source PR review.
 
+### [`claude-config/`](./claude-config/) — the rest of each project's `.claude/`
+
+Per-project `settings.json` (permission allow/deny + hook wiring), the hook
+scripts themselves, agent reference docs, and the documenters status line —
+grouped by family, mirroring each repo's `.claude/` layout. Excludes
+machine-local `settings.local.json` and redundant archives.
+
 ### [`skydeck-ai-tools/`](./skydeck-ai-tools/) — SkyDeck.ai tool configs
 
 The authoritative copies of personal [SkyDeck.ai](https://skydeck.ai/)
@@ -88,6 +95,10 @@ aidd-personal-dc/
 ├── claude-commands/               # global /<name> slash commands
 │   ├── README.md
 │   └── pr-review.md
+├── claude-config/                 # settings.json, hooks, agent docs, statusline
+│   ├── README.md
+│   ├── city-scrapers/             # settings.json + docs/ + hooks/
+│   └── documenters/               # settings.json + hooks/ + statusline.sh
 └── skydeck-ai-tools/
     ├── README.md
     ├── avatars/                     # Source avatar artwork
