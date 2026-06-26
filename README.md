@@ -13,7 +13,9 @@ and a versioned collection of SkyDeck.ai assistant configurations.
 | Agent | Schedule | Responsibility |
 |---|---|---|
 | [`scrapers-pr-review-agent`](./ai-agents/scrapers-pr-review-agent/) | 08:00 daily | Reviews every open non-draft, non-dependabot scraper PR and writes the review to `~/pr-reviews/<repo>_PR<n>.md`. Does not post to GitHub. |
+| [`documenters-pr-review-agent`](./ai-agents/documenters-pr-review-agent/) | 08:30 daily | Same pattern scoped to `City-Bureau/documenters`: reviews open non-draft, non-bot PRs (skipping ones already approved) via `/code-review` → `~/pr-reviews/documenters_PR<n>.md`. |
 | [`scrapers-pr-conflict-resolver-agent`](./ai-agents/scrapers-pr-conflict-resolver-agent/) | 09:00 daily | Reads each repo's latest `refresh-staging.yml` run, resolves any `Skipped: #N #M` conflicts via a sandboxed Claude plus deterministic `pipenv lock`, and pushes the merge commits to `staging`. |
+| [`documenters-issue-to-pr-agent`](./ai-agents/documenters-issue-to-pr-agent/) | on-demand | Multi-agent flow (analyzer → planner → implementer → validator) that turns a Linear issue into a documenters PR. Stops before push by default; opening the PR is an explicit human-approved step. |
 
 Operational conventions common to both agents — platform, credentials,
 logging, and the daily run order — are documented in
@@ -21,11 +23,29 @@ logging, and the daily run order — are documented in
 
 ### [`claude-skills/`](./claude-skills/) — invocable Claude Code skills
 
-Drop-in skill bundles for `.claude/skills/`. Currently includes
-[`city-scrapers/`](./claude-skills/city-scrapers/) — code-review,
-merge-staging, and refresh-staging-scraped-data skills for the
-[City-Bureau/city-scrapers](https://github.com/City-Bureau/city-scrapers)
-family of repos.
+Drop-in skill bundles for `.claude/skills/`, grouped by project family:
+
+- [`city-scrapers/`](./claude-skills/city-scrapers/) — spider authoring
+  (build/fix/validate/audit), code-review, and the staging→prod release
+  pipeline for the
+  [City-Bureau/city-scrapers](https://github.com/City-Bureau/city-scrapers)
+  family of repos.
+- [`documenters/`](./claude-skills/documenters/) — Linear ticketing,
+  commit/merge helpers, Agency debugging, and PR-review for the
+  `City-Bureau/documenters` app.
+
+### [`claude-agents/`](./claude-agents/) — Claude Code subagents
+
+`Agent`-tool subagents (`.claude/agents/*.md`) that the main agent delegates
+focused work to *inside* a session — spider exploration/debugging/review and
+fixture curation for scrapers, plus Dramatiq / migration / Heroku-log
+specialists for documenters. (Distinct from `ai-agents/`, which are scheduled
+headless flows.)
+
+### [`claude-commands/`](./claude-commands/) — slash commands
+
+Global `/<name>` commands (`~/.claude/commands/*.md`). Currently `/pr-review` —
+a parallel-agent, verified-at-source PR review.
 
 ### [`skydeck-ai-tools/`](./skydeck-ai-tools/) — SkyDeck.ai tool configs
 
@@ -55,11 +75,19 @@ aidd-personal-dc/
 │       ├── launchd/
 │       └── samples/
 ├── claude-skills/
-│   └── city-scrapers/
+│   ├── city-scrapers/             # spider authoring + staging/prod pipeline
+│   │   ├── README.md
+│   │   └── <skill>/SKILL.md
+│   └── documenters/               # Linear, commit/merge, agency-debug, review
 │       ├── README.md
-│       ├── code-review/SKILL.md
-│       ├── merge-staging/SKILL.md
-│       └── refresh-staging-scraped-data/SKILL.md
+│       └── <skill>/SKILL.md
+├── claude-agents/                 # in-session Agent-tool subagents
+│   ├── README.md
+│   ├── city-scrapers/*.md
+│   └── documenters/*.md
+├── claude-commands/               # global /<name> slash commands
+│   ├── README.md
+│   └── pr-review.md
 └── skydeck-ai-tools/
     ├── README.md
     ├── avatars/                     # Source avatar artwork
